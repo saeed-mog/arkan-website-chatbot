@@ -1,32 +1,17 @@
 import { handleChatTurn } from "@/lib/rag/chat";
+import { getChatSettings } from "@/lib/rag/config";
+import { isRateLimited } from "@/lib/rag/ratelimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// ── rate-limit ساده‌ی درون‌حافظه‌ای (پایه برای M1) ──
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 20;
-const hits = new Map<string, number[]>();
-
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const arr = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  arr.push(now);
-  hits.set(key, arr);
-  return arr.length > MAX_PER_WINDOW;
-}
+const MAX_MESSAGE_LENGTH = 2000;
 
 export async function POST(req: Request) {
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     "anon";
-
-  if (rateLimited(ip)) {
-    return new Response("تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید.", {
-      status: 429,
-    });
-  }
 
   let body: { message?: string; conversationId?: string | null; channel?: string };
   try {
@@ -39,8 +24,17 @@ export async function POST(req: Request) {
   if (!message) {
     return new Response("پیام خالی است.", { status: 400 });
   }
-  if (message.length > 2000) {
+  if (message.length > MAX_MESSAGE_LENGTH) {
     return new Response("پیام بیش از حد طولانی است.", { status: 400 });
+  }
+
+  // سقف نرخ از پنل خوانده می‌شود و در دیتابیس شمرده می‌شود (نه درون‌حافظه‌ای).
+  const settings = await getChatSettings();
+  if (await isRateLimited(`chat:${ip}`, settings.rate_limit_per_minute)) {
+    return new Response("تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید.", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    });
   }
 
   try {

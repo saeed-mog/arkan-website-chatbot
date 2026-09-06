@@ -45,14 +45,48 @@ function Hint({ children }: { children: React.ReactNode }) {
   return <p className="mt-1.5 text-[0.8rem] leading-6 text-slate">{children}</p>;
 }
 
-export default function ModelSettings({ model, embedding }: { model: ModelConfig; embedding: EmbeddingConfig }) {
+const CHANNEL_LABELS: Record<string, string> = {
+  web: "صفحه‌ی چت",
+  widget: "ویجت سایت",
+  telegram: "تلگرام",
+};
+
+export default function ModelSettings({
+  models,
+  embedding,
+}: {
+  models: ModelConfig[];
+  embedding: EmbeddingConfig;
+}) {
+  const [channel, setChannel] = useState(models[0]?.channel ?? "web");
+  const current = models.find((m) => m.channel === channel) ?? models[0];
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-heading text-h3 font-bold text-pine">مدل‌ها و بازیابی</h1>
         <p className="mt-1 text-caption text-slate">همه‌ی مدل‌های تولید پاسخ از طریق OpenRouter فراخوانی می‌شوند؛ تعویض مدل فقط تغییر یک گزینه است.</p>
       </div>
-      <ModelForm model={model} />
+
+      {/* هر کانال پیکربندی مستقل دارد: ویجت می‌تواند مدل ارزان‌تر و پاسخ کوتاه‌تر داشته باشد. */}
+      <div className="flex flex-wrap gap-2">
+        {models.map((m) => (
+          <button
+            key={m.channel}
+            type="button"
+            onClick={() => setChannel(m.channel)}
+            className={
+              m.channel === channel
+                ? "rounded-btn bg-pine px-4 py-2 text-caption font-medium text-bone"
+                : "rounded-btn border border-sand bg-white px-4 py-2 text-caption text-slate transition-colors hover:border-pine/30"
+            }
+          >
+            {CHANNEL_LABELS[m.channel] ?? m.channel}
+          </button>
+        ))}
+      </div>
+
+      {current && <ModelForm key={current.channel} model={current} />}
       <EmbeddingForm embedding={embedding} />
     </div>
   );
@@ -74,6 +108,7 @@ function ModelForm({ model }: { model: ModelConfig }) {
   function save() {
     start(async () => {
       const res = await saveModelConfigAction({
+        channel: model.channel,
         active_model: activeModel,
         temperature,
         max_tokens: maxTokens,
@@ -90,7 +125,7 @@ function ModelForm({ model }: { model: ModelConfig }) {
         مدل تولید پاسخ<En>Generation Model</En>
       </h2>
       <p className="mb-4 text-[0.85rem] leading-7 text-slate">
-        مدلی که متن پاسخ چت‌بات را می‌نویسد و پارامترهای نمونه‌برداری آن. این تنظیمات روی هر سه کانال (وب، ویجت، تلگرام) اثر می‌گذارد.
+        مدلی که متن پاسخ چت‌بات را می‌نویسد و پارامترهای نمونه‌برداری آن. این تنظیمات فقط روی کانال <b>{CHANNEL_LABELS[model.channel] ?? model.channel}</b> اثر می‌گذارد؛ کانال‌های دیگر پیکربندی مستقل دارند.
       </p>
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="sm:col-span-2">
@@ -180,6 +215,8 @@ function EmbeddingForm({ embedding }: { embedding: EmbeddingConfig }) {
   const [overlap, setOverlap] = useState(embedding.chunk_overlap);
   const [topK, setTopK] = useState(embedding.top_k);
   const [threshold, setThreshold] = useState(embedding.similarity_threshold);
+  const [rerankerEnabled, setRerankerEnabled] = useState(embedding.reranker_enabled);
+  const [rerankerModel, setRerankerModel] = useState(embedding.reranker_model ?? "rerank-multilingual-v3.0");
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -190,6 +227,8 @@ function EmbeddingForm({ embedding }: { embedding: EmbeddingConfig }) {
         chunk_overlap: overlap,
         top_k: topK,
         similarity_threshold: threshold,
+        reranker_enabled: rerankerEnabled,
+        reranker_model: rerankerEnabled ? rerankerModel : null,
       });
       setMsg({ ok: res.ok, text: res.message ?? "" });
     });
@@ -246,6 +285,34 @@ function EmbeddingForm({ embedding }: { embedding: EmbeddingConfig }) {
           <Hint>
             حداقل نمره‌ی شباهت (کسینوسی، بین ۰ و ۱) که یک قطعه باید داشته باشد تا اصلاً به مدل داده شود. بالا بردنش جلوی منابع بی‌ربط را می‌گیرد ولی ممکن است چت‌بات بگوید «اطلاعاتی ندارم»؛ پایین آوردنش منابع نویزی وارد پاسخ می‌کند. پیش‌فرض ۰٫۳.
           </Hint>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={rerankerEnabled}
+              onChange={(e) => setRerankerEnabled(e.target.checked)}
+              className="h-5 w-5 accent-pine"
+            />
+            <span className="text-caption font-medium text-ink">
+              بازچینش نتایج<En>Reranker</En>
+            </span>
+          </label>
+          <Hint>
+            جست‌وجوی برداری «شبیه‌ترین» قطعه‌ها را می‌آورد، نه لزوماً «مرتبط‌ترین». با فعال‌بودن این گزینه، سه برابر
+            <span dir="ltr" className="font-mono"> top_k </span>
+            قطعه بازیابی می‌شود و یک مدل مخصوص، آن‌ها را بر اساس ارتباط واقعی با سؤال دوباره مرتب می‌کند؛ فقط بهترین‌ها به مدل پاسخ‌دهنده می‌رسند.
+            دقت را محسوس بالا می‌برد و به‌ازای هر پرسش یک فراخوانی ارزان اضافه می‌کند. نیازمند <span dir="ltr" className="font-mono">COHERE_API_KEY</span>.
+          </Hint>
+          {rerankerEnabled && (
+            <input
+              value={rerankerModel}
+              onChange={(e) => setRerankerModel(e.target.value)}
+              dir="ltr"
+              className={`${inputCls} mt-2 font-mono text-[0.85rem]`}
+              placeholder="rerank-multilingual-v3.0"
+            />
+          )}
         </div>
       </div>
       <div className="mt-5 flex items-center gap-3">

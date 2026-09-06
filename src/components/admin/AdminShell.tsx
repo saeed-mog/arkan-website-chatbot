@@ -38,12 +38,14 @@ const GROUPS = [
       { key: "persona", label: "پرسونا", href: "/admin/persona" },
       { key: "playground", label: "پلی‌گراند", href: "/admin/playground" },
       { key: "feedback", label: "بازخورد", href: "/admin/feedback" },
+      { key: "gaps", label: "سؤال‌های بی‌پاسخ", href: "/admin/gaps" },
     ],
   },
   {
     key: "settings",
     label: "تنظیمات",
     tabs: [
+      { key: "chat-settings", label: "تنظیمات چت‌بات", href: "/admin/settings" },
       { key: "widget", label: "ویجت", href: "/admin/widget" },
       { key: "telegram", label: "تلگرام", href: "/admin/telegram" },
       { key: "users", label: "کاربران", href: "/admin/users", minRole: "admin" },

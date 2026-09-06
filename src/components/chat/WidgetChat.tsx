@@ -3,17 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useArkanChat, type ChatMsg } from "@/lib/useArkanChat";
 import { renderBold } from "./format";
+import FeedbackBar from "./FeedbackBar";
 
 const SITE_URL = "https://arkan-website-chatbot.vercel.app";
 
 export default function WidgetChat({
   welcomeMessage,
   primaryColor,
+  suggestedQuestions = [],
 }: {
   welcomeMessage: string;
   primaryColor: string;
+  suggestedQuestions?: string[];
 }) {
-  const { messages, loading, conversationId, send } = useArkanChat({
+  const { messages, loading, conversationId, send, stop, reset } = useArkanChat({
     channel: "widget",
     storageKey: "arkan_widget_conv",
   });
@@ -44,13 +47,36 @@ export default function WidgetChat({
           <p className="font-heading text-[0.95rem] font-bold">دستیار آرکان</p>
           <p className="text-[0.7rem] opacity-80">معمولاً سریع پاسخ می‌دهد</p>
         </div>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={reset}
+            className="mr-auto rounded-btn bg-white/15 px-2.5 py-1 text-[0.7rem] text-bone transition-colors hover:bg-white/25"
+          >
+            گفتگوی جدید
+          </button>
+        )}
       </header>
 
       {/* پیام‌ها */}
       <div ref={scrollRef} className="flex-1 space-y-3.5 overflow-y-auto px-4 py-4">
         {/* پیام خوش‌آمد */}
         <Bubble role="assistant">{welcomeMessage}</Bubble>
-        {empty && (
+        {empty && suggestedQuestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+            {suggestedQuestions.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => send(q)}
+                className="rounded-full border border-sand bg-white px-3 py-1.5 text-right text-[0.78rem] leading-5 text-ink transition-colors hover:border-pine/40"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+        {empty && suggestedQuestions.length === 0 && (
           <p className="px-1 pt-1 text-[0.75rem] text-slate">
             می‌توانید درباره‌ی خدمات، قیمت‌ها، متدولوژی چهار رکن یا فرایند همکاری بپرسید.
           </p>
@@ -61,8 +87,8 @@ export default function WidgetChat({
             <Bubble role={msg.role} error={msg.error} primaryColor={primaryColor}>
               {msg.content || "…"}
             </Bubble>
-            {msg.role === "assistant" && !msg.error && msg.id === lastAssistantId && msg.content && (
-              <Feedback conversationId={conversationId} />
+            {msg.role === "assistant" && !msg.error && msg.id === lastAssistantId && msg.content && !loading && (
+              <FeedbackBar conversationId={conversationId} text={msg.content} compact />
             )}
           </div>
         ))}
@@ -95,16 +121,28 @@ export default function WidgetChat({
             className="max-h-28 flex-1 resize-none bg-transparent px-2 py-1.5 text-[0.9rem] leading-6 text-ink placeholder:text-slate/60 focus:outline-none"
             aria-label="پیام شما"
           />
-          <button
-            type="button"
-            onClick={submit}
-            disabled={loading || !input.trim()}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-btn text-bone transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: primaryColor }}
-            aria-label="ارسال"
-          >
-            <SendIcon />
-          </button>
+          {loading ? (
+            <button
+              type="button"
+              onClick={stop}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-btn bg-slate text-bone transition-opacity"
+              aria-label="توقف پاسخ"
+              title="توقف پاسخ"
+            >
+              <StopIcon />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!input.trim()}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-btn text-bone transition-opacity disabled:opacity-50"
+              style={{ backgroundColor: primaryColor }}
+              aria-label="ارسال"
+            >
+              <SendIcon />
+            </button>
+          )}
         </div>
         <p className="mt-1.5 text-center text-[0.65rem] text-slate/70">پاسخ‌ها با هوش مصنوعی تولید می‌شوند.</p>
       </div>
@@ -151,34 +189,11 @@ function Bubble({
   );
 }
 
-function Feedback({ conversationId }: { conversationId: string | null }) {
-  const [sent, setSent] = useState<"up" | "down" | null>(null);
-  async function rate(rating: "up" | "down") {
-    if (sent || !conversationId) return;
-    setSent(rating);
-    try {
-      await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, rating }),
-      });
-    } catch {
-      /* بی‌صدا */
-    }
-  }
-  if (sent) {
-    return <p className="mt-1 px-1 text-[0.7rem] text-slate">ممنون از بازخوردتان 🙏</p>;
-  }
+function StopIcon() {
   return (
-    <div className="mt-1 flex items-center gap-1.5 px-1">
-      <span className="text-[0.7rem] text-slate">مفید بود؟</span>
-      <button type="button" onClick={() => rate("up")} className="rounded p-1 text-slate hover:text-pine" aria-label="مفید بود">
-        <ThumbIcon up />
-      </button>
-      <button type="button" onClick={() => rate("down")} className="rounded p-1 text-slate hover:text-pine" aria-label="مفید نبود">
-        <ThumbIcon />
-      </button>
-    </div>
+    <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
   );
 }
 
@@ -207,13 +222,6 @@ function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3l1.8 4.9L18.7 9l-4.9 1.1L12 15l-1.8-4.9L5.3 9l4.9-1.1z" />
-    </svg>
-  );
-}
-function ThumbIcon({ up }: { up?: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: up ? "none" : "rotate(180deg)" }}>
-      <path d="M7 10v11M7 10l4-7a2 2 0 012.7 1.8V8h4.5a2 2 0 011.9 2.5l-1.7 7A2 2 0 0117.5 19H7" />
     </svg>
   );
 }

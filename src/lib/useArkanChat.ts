@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Source = { title: string; similarity: number; chunk_index: number };
 export type ChatMsg = {
@@ -26,6 +26,9 @@ const nextId = () => `m${++idCounter}`;
 /**
  * هوک مشترک گفتگو — منطق استریم/حافظه/منابع را برای همه‌ی کانال‌ها
  * (صفحه‌ی چت و ویجت) یک‌جا نگه می‌دارد.
+ *
+ * stop()  → قطع پاسخ در حال تولید (متن تولیدشده تا آن لحظه می‌ماند)
+ * reset() → شروع گفتگوی جدید (شناسه‌ی گفتگو هم پاک می‌شود)
  */
 export function useArkanChat(opts: { channel?: string; storageKey?: string } = {}) {
   const channel = opts.channel ?? "web";
@@ -34,10 +37,29 @@ export function useArkanChat(opts: { channel?: string; storageKey?: string } = {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey);
     if (saved) setConversationId(saved);
+  }, [storageKey]);
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setConversationId(null);
+    setLoading(false);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      /* حالت خصوصی مرورگر */
+    }
   }, [storageKey]);
 
   const send = useCallback(
@@ -53,11 +75,15 @@ export function useArkanChat(opts: { channel?: string; storageKey?: string } = {
       ]);
       setLoading(true);
 
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed, conversationId, channel }),
+          signal: controller.signal,
         });
 
         const metaB64 = res.headers.get("x-arkan-meta");
@@ -93,7 +119,18 @@ export function useArkanChat(opts: { channel?: string; storageKey?: string } = {
             msg.id === assistantId ? { ...msg, content: acc || "—", sources: meta.sources } : msg
           )
         );
-      } catch {
+      } catch (e) {
+        // توقف عمدی کاربر خطا نیست: متن تولیدشده را نگه می‌داریم
+        if ((e as Error)?.name === "AbortError") {
+          setMessages((m) =>
+            m.map((msg) =>
+              msg.id === assistantId && !msg.content
+                ? { ...msg, content: "پاسخ متوقف شد." }
+                : msg
+            )
+          );
+          return;
+        }
         setMessages((m) =>
           m.map((msg) =>
             msg.id === assistantId
@@ -102,11 +139,12 @@ export function useArkanChat(opts: { channel?: string; storageKey?: string } = {
           )
         );
       } finally {
+        abortRef.current = null;
         setLoading(false);
       }
     },
     [conversationId, loading, channel, storageKey]
   );
 
-  return { messages, loading, conversationId, send };
+  return { messages, loading, conversationId, send, stop, reset };
 }

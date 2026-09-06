@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ChatPanel from "@/components/chat/ChatPanel";
+import { getWidgetConfig } from "@/lib/rag/widget";
 
 export const metadata: Metadata = {
   title: "گفت‌وگو با مشاور آرکان",
@@ -9,6 +10,8 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function ConsultantPage() {
-  return <ChatPanel />;
+export default async function ConsultantPage() {
+  // سؤال‌های پیشنهادی از همان تنظیماتی می‌آیند که ویجت استفاده می‌کند.
+  const cfg = await getWidgetConfig();
+  return <ChatPanel starters={cfg.suggested_questions} />;
 }

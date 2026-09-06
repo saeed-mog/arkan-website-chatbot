@@ -77,3 +77,46 @@ export async function embedOne(
   const [vec] = await embed([text], inputType, config);
   return vec;
 }
+
+/**
+ * بازچینش (rerank) نتایج بازیابی با Cohere Rerank.
+ * جست‌وجوی برداری «شبیه‌ترین» را می‌آورد؛ reranker «مرتبط‌ترین» را انتخاب می‌کند
+ * و معمولاً دقت پاسخ‌ها را محسوس بالا می‌برد.
+ * خروجی: ایندکس‌های documents به ترتیب ارتباط (طول ≤ topN).
+ */
+export async function rerank(
+  query: string,
+  documents: string[],
+  topN: number,
+  model: string
+): Promise<{ index: number; score: number }[]> {
+  const apiKey = process.env.COHERE_API_KEY;
+  if (!apiKey || documents.length === 0) return [];
+
+  const res = await fetch("https://api.cohere.com/v2/rerank", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: model || "rerank-multilingual-v3.0",
+      query,
+      documents,
+      top_n: Math.min(topN, documents.length),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`خطای Cohere Rerank (${res.status}): ${body.slice(0, 300)}`);
+  }
+
+  const json = await res.json();
+  const results = json?.results;
+  if (!Array.isArray(results)) return [];
+  return results.map((r: { index: number; relevance_score: number }) => ({
+    index: r.index,
+    score: r.relevance_score,
+  }));
+}

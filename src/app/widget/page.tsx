@@ -12,5 +12,11 @@ export const dynamic = "force-dynamic";
 // محتوای داخل iframe ویجت. هدر frame-ancestors از middleware ست می‌شود.
 export default async function WidgetPage() {
   const cfg = await getWidgetConfig();
-  return <WidgetChat welcomeMessage={cfg.welcome_message} primaryColor={cfg.primary_color} />;
+  return (
+    <WidgetChat
+      welcomeMessage={cfg.welcome_message}
+      primaryColor={cfg.primary_color}
+      suggestedQuestions={cfg.suggested_questions}
+    />
+  );
 }

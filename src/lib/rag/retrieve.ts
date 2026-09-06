@@ -1,6 +1,6 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { embedOne } from "./embeddings";
+import { embedOne, rerank } from "./embeddings";
 import { getEmbeddingConfig, type EmbeddingConfig } from "./config";
 
 export type RetrievedChunk = {
@@ -33,9 +33,12 @@ export async function retrieve(
     return [];
   }
 
+  // با فعال‌بودن reranker عمداً بیشتر می‌گیریم تا بازچینش چیزی برای انتخاب داشته باشد.
+  const matchCount = cfg.reranker_enabled ? Math.min(cfg.top_k * 3, 30) : cfg.top_k;
+
   const { data, error } = await supabase.rpc("match_chunks", {
     query_embedding: queryVector,
-    match_count: cfg.top_k,
+    match_count: matchCount,
     similarity_threshold: cfg.similarity_threshold,
   });
 
@@ -44,8 +47,27 @@ export async function retrieve(
     return [];
   }
 
-  const rows = (data ?? []) as Omit<RetrievedChunk, "title">[];
+  let rows = (data ?? []) as Omit<RetrievedChunk, "title">[];
   if (rows.length === 0) return [];
+
+  // بازچینش (اختیاری) — خطایش نباید کل بازیابی را بخواباند.
+  if (cfg.reranker_enabled && rows.length > 1) {
+    try {
+      const ranked = await rerank(
+        query,
+        rows.map((r) => r.content),
+        cfg.top_k,
+        cfg.reranker_model || "rerank-multilingual-v3.0"
+      );
+      if (ranked.length > 0) {
+        rows = ranked.map((r) => ({ ...rows[r.index], similarity: r.score }));
+      }
+    } catch (e) {
+      console.error("[retrieve] خطای rerank:", (e as Error).message);
+      rows = rows.slice(0, cfg.top_k);
+    }
+  }
+  rows = rows.slice(0, cfg.top_k);
 
   // ضمیمه‌کردن عنوان سند
   const docIds = Array.from(new Set(rows.map((r) => r.document_id)));

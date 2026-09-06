@@ -10,6 +10,7 @@ export type WidgetConfig = {
   position: "left" | "right";
   welcome_message: string;
   launcher_text: string;
+  suggested_questions: string[];
   allowed_domains: string[];
 };
 
@@ -20,6 +21,12 @@ export const DEFAULT_WIDGET_CONFIG: WidgetConfig = {
   welcome_message:
     "سلام! من دستیار هوشمند آرکان هستم. چطور می‌توانم درباره‌ی خدمات و رشد کسب‌وکارتان کمک کنم؟",
   launcher_text: "گفت‌وگو با مشاور",
+  suggested_questions: [
+    "آرکان دقیقاً چه کمکی به کسب‌وکار من می‌کند؟",
+    "متدولوژی «چهار رکن» چیست؟",
+    "هزینه و مدت بسته‌های مشاوره چقدر است؟",
+    "برای شروع همکاری باید چه کار کنم؟",
+  ],
   allowed_domains: [],
 };
 

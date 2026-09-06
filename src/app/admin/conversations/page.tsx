@@ -19,7 +19,7 @@ export default async function ConversationsPage() {
   } else {
     const { data, error: e } = await supabase
       .from("conversations")
-      .select("id, channel, status, started_at, last_at")
+      .select("id, channel, status, summary, escalation_reason, contact_hint, escalated_at, started_at, last_at")
       .order("last_at", { ascending: false })
       .limit(50);
     if (e) error = e.message;

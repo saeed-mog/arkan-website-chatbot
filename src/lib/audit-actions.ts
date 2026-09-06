@@ -44,6 +44,11 @@ export const AUDIT_ACTION_LABELS = {
   contract_cancel: "لغو قرارداد",
   contract_accept: "تأیید قرارداد توسط کلاینت",
   ai_draft_contract: "پیش‌نویس AI قرارداد",
+  chatbot_model_config_update: "تغییر تنظیمات مدل چت‌بات",
+  chatbot_settings_update: "تغییر تنظیمات چت‌بات",
+  conversation_status_change: "تغییر وضعیت گفتگو",
+  ai_summarize_conversation: "خلاصه‌سازی AI گفتگو",
+  knowledge_gap_resolve: "رسیدگی به سؤال بی‌پاسخ",
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABELS;

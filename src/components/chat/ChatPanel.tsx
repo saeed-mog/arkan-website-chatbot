@@ -4,16 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import Logo from "@/components/ui/Logo";
 import { useArkanChat, type ChatMsg, type Source } from "@/lib/useArkanChat";
 import { renderBold } from "./format";
+import FeedbackBar from "./FeedbackBar";
 
-const STARTERS = [
+// اگر پنل چیزی تعریف نکرده باشد، همین‌ها نمایش داده می‌شوند.
+const FALLBACK_STARTERS = [
   "آرکان دقیقاً چه کمکی به کسب‌وکار من می‌کند؟",
   "متدولوژی «چهار رکن» چیست؟",
   "هزینه و مدت بسته‌های مشاوره چقدر است؟",
   "برای شروع همکاری باید چه کار کنم؟",
 ];
 
-export default function ChatPanel() {
-  const { messages, loading, send } = useArkanChat({ channel: "web", storageKey: "arkan_conv" });
+export default function ChatPanel({ starters }: { starters?: string[] }) {
+  const questions = starters && starters.length > 0 ? starters : FALLBACK_STARTERS;
+  const { messages, loading, conversationId, send, stop, reset } = useArkanChat({
+    channel: "web",
+    storageKey: "arkan_conv",
+  });
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -37,6 +43,7 @@ export default function ChatPanel() {
   }
 
   const empty = messages.length === 0;
+  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.error && m.content)?.id;
 
   return (
     <div className="flex min-h-dvh flex-col bg-bone">
@@ -45,23 +52,39 @@ export default function ChatPanel() {
           <a href="/" className="rounded-btn" aria-label="آرکان — خانه">
             <Logo />
           </a>
-          <a
-            href="/#consultation"
-            className="inline-flex items-center gap-1.5 rounded-btn bg-pine px-4 py-2 text-caption font-medium text-bone transition-colors hover:bg-pine-dark"
-          >
-            درخواست مشاوره
-          </a>
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={reset}
+                className="inline-flex items-center gap-1.5 rounded-btn border border-sand px-3 py-2 text-caption text-slate transition-colors hover:border-pine/30 hover:text-pine"
+              >
+                گفتگوی جدید
+              </button>
+            )}
+            <a
+              href="/#consultation"
+              className="inline-flex items-center gap-1.5 rounded-btn bg-pine px-4 py-2 text-caption font-medium text-bone transition-colors hover:bg-pine-dark"
+            >
+              درخواست مشاوره
+            </a>
+          </div>
         </div>
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full max-w-3xl flex-col px-5 py-6">
           {empty ? (
-            <WelcomeScreen onPick={(q) => send(q)} />
+            <WelcomeScreen questions={questions} onPick={(q) => send(q)} />
           ) : (
             <div className="flex flex-col gap-5">
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} />
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  showFeedback={!loading && msg.id === lastAssistantId}
+                  conversationId={conversationId}
+                />
               ))}
               {loading && <TypingIndicator />}
             </div>
@@ -82,15 +105,27 @@ export default function ChatPanel() {
               className="max-h-40 flex-1 resize-none bg-transparent px-2 py-2 text-[0.95rem] leading-7 text-ink placeholder:text-slate/60 focus:outline-none"
               aria-label="پیام شما"
             />
-            <button
-              type="button"
-              onClick={submit}
-              disabled={loading || !input.trim()}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-btn bg-pine text-bone transition-colors hover:bg-pine-dark disabled:opacity-50"
-              aria-label="ارسال"
-            >
-              <SendIcon />
-            </button>
+            {loading ? (
+              <button
+                type="button"
+                onClick={stop}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-btn bg-slate text-bone transition-colors hover:bg-ink"
+                aria-label="توقف پاسخ"
+                title="توقف پاسخ"
+              >
+                <StopIcon />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!input.trim()}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-btn bg-pine text-bone transition-colors hover:bg-pine-dark disabled:opacity-50"
+                aria-label="ارسال"
+              >
+                <SendIcon />
+              </button>
+            )}
           </div>
           <p className="mt-2 text-center text-[0.75rem] text-slate/80">
             پاسخ‌ها توسط هوش مصنوعی تولید می‌شوند و ممکن است کامل نباشند. برای مشاوره‌ی دقیق، درخواست خود را ثبت کنید.
@@ -101,7 +136,7 @@ export default function ChatPanel() {
   );
 }
 
-function WelcomeScreen({ onPick }: { onPick: (q: string) => void }) {
+function WelcomeScreen({ questions, onPick }: { questions: string[]; onPick: (q: string) => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
       <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-pine text-bone">
@@ -112,7 +147,7 @@ function WelcomeScreen({ onPick }: { onPick: (q: string) => void }) {
         درباره‌ی خدمات، متدولوژی چهار رکن و مسیر همکاری بپرسید. هر وقت آماده بودید، درخواست مشاوره‌ی رایگان ثبت کنید.
       </p>
       <div className="mt-8 grid w-full max-w-lg gap-3 sm:grid-cols-2">
-        {STARTERS.map((q) => (
+        {questions.map((q) => (
           <button
             key={q}
             type="button"
@@ -127,7 +162,15 @@ function WelcomeScreen({ onPick }: { onPick: (q: string) => void }) {
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMsg }) {
+function MessageBubble({
+  msg,
+  showFeedback,
+  conversationId,
+}: {
+  msg: ChatMsg;
+  showFeedback?: boolean;
+  conversationId?: string | null;
+}) {
   const isUser = msg.role === "user";
   return (
     <div className={isUser ? "flex justify-start" : "flex justify-end"}>
@@ -144,6 +187,9 @@ function MessageBubble({ msg }: { msg: ChatMsg }) {
           <p className="whitespace-pre-wrap">{msg.content ? renderBold(msg.content) : "…"}</p>
         </div>
         {!isUser && msg.sources && msg.sources.length > 0 && <SourcePills sources={msg.sources} />}
+        {!isUser && showFeedback && (
+          <FeedbackBar conversationId={conversationId ?? null} text={msg.content} />
+        )}
       </div>
     </div>
   );
@@ -191,6 +237,13 @@ function SendIcon() {
   return (
     <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 12H4M10 6l-6 6 6 6" />
+    </svg>
+  );
+}
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width={18} height={18} fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
     </svg>
   );
 }

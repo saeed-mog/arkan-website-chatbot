@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { canWrite, getSession, isAuthed } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import {
   ingestDocument,
@@ -15,7 +16,8 @@ function parseTags(raw: string | null | undefined): string[] | undefined {
   return tags.length ? tags : undefined;
 }
 import { retrieve, buildContext, type RetrievedChunk } from "@/lib/rag/retrieve";
-import { getActivePrompt, getModelConfig } from "@/lib/rag/config";
+import { getActivePrompt, getModelConfig, type ChatSettings } from "@/lib/rag/config";
+import { summarizeConversation } from "@/lib/rag/summarize";
 import { streamChat } from "@/lib/rag/generate";
 
 type ActionResult = { ok: boolean; message?: string };
@@ -131,7 +133,10 @@ export async function testSearchAction(
 }
 
 // ── پیکربندی مدل و embedding ────────────────────────────────────
+const CHANNELS = ["web", "widget", "telegram"] as const;
+
 export async function saveModelConfigAction(values: {
+  channel: string;
   active_model: string;
   temperature: number;
   max_tokens: number;
@@ -142,19 +147,26 @@ export async function saveModelConfigAction(values: {
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
+  const channel = (CHANNELS as readonly string[]).includes(values.channel) ? values.channel : "web";
+
   const { data: existing } = await supabase
     .from("model_config")
     .select("id")
-    .eq("channel", "web")
+    .eq("channel", channel)
     .maybeSingle();
 
-  const payload = { ...values, channel: "web", updated_at: new Date().toISOString() };
+  const payload = { ...values, channel, updated_at: new Date().toISOString() };
   const { error } = existing
     ? await supabase.from("model_config").update(payload).eq("id", existing.id)
     : await supabase.from("model_config").insert(payload);
 
+  if (error) return { ok: false, message: error.message };
+  await logAudit(getSession(), "chatbot_model_config_update", channel, {
+    model: values.active_model,
+    max_tokens: values.max_tokens,
+  });
   revalidatePath("/admin/models");
-  return error ? { ok: false, message: error.message } : { ok: true, message: "تنظیمات مدل ذخیره شد." };
+  return { ok: true, message: `تنظیمات مدل کانال «${channel}» ذخیره شد.` };
 }
 
 export async function saveEmbeddingConfigAction(values: {
@@ -162,6 +174,8 @@ export async function saveEmbeddingConfigAction(values: {
   chunk_overlap: number;
   top_k: number;
   similarity_threshold: number;
+  reranker_enabled: boolean;
+  reranker_model: string | null;
 }): Promise<ActionResult> {
   if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
@@ -347,6 +361,7 @@ export async function saveWidgetConfigAction(values: {
   position: string;
   welcome_message: string;
   launcher_text: string;
+  suggested_questions: string[];
   allowed_domains: string[];
 }): Promise<ActionResult> {
   if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
@@ -430,4 +445,97 @@ export async function getConversationDetailAction(
   }));
 
   return { ok: true, messages };
+}
+
+// ── تنظیمات رفتاری چت‌بات ───────────────────────────────────────
+export async function saveChatSettingsAction(values: ChatSettings): Promise<ActionResult> {
+  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
+
+  if (values.rate_limit_per_minute < 1 || values.rate_limit_per_minute > 200) {
+    return { ok: false, message: "سقف نرخ باید بین ۱ تا ۲۰۰ باشد." };
+  }
+  if (values.max_messages_per_conv < 4 || values.max_messages_per_conv > 500) {
+    return { ok: false, message: "سقف پیام هر گفتگو باید بین ۴ تا ۵۰۰ باشد." };
+  }
+  const hhmm = /^\d{2}:\d{2}$/;
+  if (!hhmm.test(values.office_hours_start) || !hhmm.test(values.office_hours_end)) {
+    return { ok: false, message: "قالب ساعت باید HH:MM باشد." };
+  }
+
+  const { data: existing } = await supabase
+    .from("chat_settings")
+    .select("id")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const payload = { ...values, updated_at: new Date().toISOString() };
+  const { error } = existing
+    ? await supabase.from("chat_settings").update(payload).eq("id", existing.id)
+    : await supabase.from("chat_settings").insert(payload);
+
+  if (error) return { ok: false, message: error.message };
+  await logAudit(getSession(), "chatbot_settings_update");
+  revalidatePath("/admin/settings");
+  return { ok: true, message: "تنظیمات چت‌بات ذخیره شد." };
+}
+
+// ── وضعیت گفتگو (ارجاع به انسان / بستن) ─────────────────────────
+export async function setConversationStatusAction(
+  conversationId: string,
+  status: "open" | "needs_human" | "closed"
+): Promise<ActionResult> {
+  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
+
+  const patch: Record<string, unknown> = { status };
+  if (status === "needs_human") patch.escalated_at = new Date().toISOString();
+
+  const { error } = await supabase.from("conversations").update(patch).eq("id", conversationId);
+  if (error) return { ok: false, message: error.message };
+
+  await logAudit(getSession(), "conversation_status_change", conversationId, { status });
+  revalidatePath("/admin/conversations");
+  return { ok: true, message: "وضعیت گفتگو به‌روز شد." };
+}
+
+/** تولید دستی خلاصه‌ی یک گفتگو. */
+export async function summarizeConversationAction(
+  conversationId: string
+): Promise<{ ok: boolean; summary?: string; message?: string }> {
+  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  const summary = await summarizeConversation(conversationId);
+  if (!summary) return { ok: false, message: "تولید خلاصه ممکن نشد." };
+  await logAudit(getSession(), "ai_summarize_conversation", conversationId);
+  revalidatePath("/admin/conversations");
+  return { ok: true, summary };
+}
+
+// ── شکاف‌های پایگاه دانش (سؤالات بی‌پاسخ) ────────────────────────
+export async function resolveGapAction(id: string, resolved: boolean): Promise<ActionResult> {
+  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
+
+  const { error } = await supabase.from("unanswered_questions").update({ resolved }).eq("id", id);
+  if (error) return { ok: false, message: error.message };
+
+  await logAudit(getSession(), "knowledge_gap_resolve", id, { resolved });
+  revalidatePath("/admin/gaps");
+  return { ok: true, message: resolved ? "به‌عنوان رفع‌شده علامت خورد." : "دوباره باز شد." };
+}
+
+export async function deleteGapAction(id: string): Promise<ActionResult> {
+  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
+
+  const { error } = await supabase.from("unanswered_questions").delete().eq("id", id);
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath("/admin/gaps");
+  return { ok: true, message: "حذف شد." };
 }

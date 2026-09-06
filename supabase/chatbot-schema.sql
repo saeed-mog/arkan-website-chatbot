@@ -78,7 +78,7 @@ create table if not exists public.model_config (
   provider          text not null default 'openrouter',
   active_model      text not null default 'google/gemini-3.5-flash',
   temperature       real not null default 0.4,
-  max_tokens        int  not null default 800,
+  max_tokens        int  not null default 2000,
   top_p             real not null default 1.0,
   fallback_provider text,
   fallback_model    text default 'google/gemini-2.5-flash',

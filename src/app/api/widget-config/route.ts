@@ -12,6 +12,7 @@ export async function GET() {
       position: cfg.position,
       launcher_text: cfg.launcher_text,
       welcome_message: cfg.welcome_message,
+      suggested_questions: cfg.suggested_questions,
     },
     {
       headers: {

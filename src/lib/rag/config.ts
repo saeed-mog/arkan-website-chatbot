@@ -45,7 +45,7 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   provider: "openrouter",
   active_model: "google/gemini-3.5-flash",
   temperature: 0.4,
-  max_tokens: 800,
+  max_tokens: 2000,
   top_p: 1,
   fallback_model: "google/gemini-2.5-flash",
 };
@@ -83,15 +83,32 @@ export async function getEmbeddingConfig(): Promise<EmbeddingConfig> {
 
 export async function getModelConfig(channel = "web"): Promise<ModelConfig> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return DEFAULT_MODEL_CONFIG;
+  if (!supabase) return { ...DEFAULT_MODEL_CONFIG, channel };
   const { data } = await supabase
     .from("model_config")
     .select("*")
     .eq("channel", channel)
     .limit(1)
     .maybeSingle();
-  if (!data) return DEFAULT_MODEL_CONFIG;
-  return { ...DEFAULT_MODEL_CONFIG, ...data } as ModelConfig;
+  if (data) return { ...DEFAULT_MODEL_CONFIG, ...data } as ModelConfig;
+
+  // کانال ردیف اختصاصی ندارد ⇒ به تنظیمات کانال «وب» برگرد، نه به مقادیر هاردکد.
+  if (channel !== "web") {
+    const { data: web } = await supabase
+      .from("model_config")
+      .select("*")
+      .eq("channel", "web")
+      .limit(1)
+      .maybeSingle();
+    if (web) return { ...DEFAULT_MODEL_CONFIG, ...web, channel } as ModelConfig;
+  }
+  return { ...DEFAULT_MODEL_CONFIG, channel };
+}
+
+/** همه‌ی ردیف‌های کانال‌ها (برای پنل مدل‌ها). */
+export async function getAllModelConfigs(): Promise<ModelConfig[]> {
+  const channels = ["web", "widget", "telegram"];
+  return Promise.all(channels.map((c) => getModelConfig(c)));
 }
 
 export async function getActivePrompt(): Promise<string> {
@@ -105,4 +122,53 @@ export async function getActivePrompt(): Promise<string> {
     .limit(1)
     .maybeSingle();
   return data?.content || DEFAULT_SYSTEM_PROMPT;
+}
+
+
+// ── تنظیمات رفتاری چت‌بات (تک‌ردیفی، مشترک بین همه‌ی کانال‌ها) ────
+export type ChatSettings = {
+  rate_limit_per_minute: number;
+  max_messages_per_conv: number;
+  handoff_enabled: boolean;
+  handoff_message: string;
+  office_hours_enabled: boolean;
+  office_hours_start: string;
+  office_hours_end: string;
+  office_days: number[]; // ۰=شنبه … ۶=جمعه
+  offline_message: string;
+  injection_guard_enabled: boolean;
+  pii_masking_enabled: boolean;
+  summary_enabled: boolean;
+  summary_every_n_messages: number;
+};
+
+export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
+  rate_limit_per_minute: 20,
+  max_messages_per_conv: 40,
+  handoff_enabled: true,
+  handoff_message:
+    "درخواست شما برای گفت‌وگو با همکاران آرکان ثبت شد. تیم ما در اولین فرصت کاری با شما تماس می‌گیرد.",
+  office_hours_enabled: false,
+  office_hours_start: "09:00",
+  office_hours_end: "18:00",
+  office_days: [0, 1, 2, 3, 4],
+  offline_message:
+    "الان خارج از ساعت کاری آرکان هستیم. من پاسخ می‌دهم، ولی برای پیگیری انسانی، اولین روز کاری با شما تماس می‌گیریم.",
+  injection_guard_enabled: true,
+  pii_masking_enabled: true,
+  summary_enabled: true,
+  summary_every_n_messages: 6,
+};
+
+export async function getChatSettings(): Promise<ChatSettings> {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return DEFAULT_CHAT_SETTINGS;
+  const { data } = await supabase
+    .from("chat_settings")
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return DEFAULT_CHAT_SETTINGS;
+  return { ...DEFAULT_CHAT_SETTINGS, ...data } as ChatSettings;
 }

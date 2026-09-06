@@ -5,8 +5,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { leadSchema } from "@/lib/validation";
 import { retrieve, buildContext } from "./retrieve";
-import { getModelConfig, getActivePrompt } from "./config";
+import { getModelConfig, getActivePrompt, getChatSettings, type ChatSettings } from "./config";
 import { streamChat, isOpenRouterConfigured, type ChatMessage } from "./generate";
+import {
+  looksLikeInjection,
+  INJECTION_REPLY,
+  INJECTION_GUARD_NOTE,
+  isWithinOfficeHours,
+  maskPII,
+  extractContactHint,
+} from "./policy";
+import { summarizeConversation, shouldSummarize } from "./summarize";
 
 /**
  * مغز مرکزی چت‌بات — مستقل از کانال.
@@ -18,6 +27,11 @@ import { streamChat, isOpenRouterConfigured, type ChatMessage } from "./generate
 const HISTORY_LIMIT = 12;
 const NOT_CONFIGURED =
   "سرویس گفتگو هنوز پیکربندی نشده است. لطفاً کمی بعد دوباره امتحان کنید یا فرم درخواست مشاوره را پر کنید.";
+const CONV_LIMIT_REPLY =
+  "این گفتگو طولانی شده است. لطفاً گفتگوی جدیدی شروع کنید یا درخواست مشاوره‌ی رایگان ثبت کنید تا همکاران ما مستقیم پیگیری کنند.";
+
+// زیر این حد، بازیابی را «ضعیف» می‌شماریم و سؤال را در شکاف‌های دانش ثبت می‌کنیم.
+const WEAK_RETRIEVAL_SCORE = 0.4;
 
 export type ChatTurnInput = {
   conversationId?: string | null;
@@ -37,6 +51,7 @@ type PreparedTurn = {
 async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
   const supabase = getSupabaseAdmin();
   const channel = input.channel ?? "web";
+  const settings = await getChatSettings();
 
   if (!isOpenRouterConfigured()) {
     return { result: null, conversationId: input.conversationId ?? null, sources: [], fallbackText: NOT_CONFIGURED };
@@ -44,6 +59,8 @@ async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
 
   // ۱) conversation
   let conversationId = input.conversationId ?? null;
+  let messageCount = 0;
+
   if (supabase) {
     if (!conversationId) {
       const { data } = await supabase
@@ -54,13 +71,37 @@ async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
       conversationId = data?.id ?? null;
     } else {
       await supabase.from("conversations").update({ last_at: new Date().toISOString() }).eq("id", conversationId);
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("conversation_id", conversationId);
+      messageCount = count ?? 0;
     }
+
+    // سقف پیام در یک گفتگو — جلوگیری از مصرف بی‌پایان توکن روی یک نشست
+    if (settings.max_messages_per_conv > 0 && messageCount >= settings.max_messages_per_conv) {
+      await persistCannedTurn(supabase, conversationId, input.userMessage, CONV_LIMIT_REPLY);
+      return { result: null, conversationId, sources: [], fallbackText: CONV_LIMIT_REPLY };
+    }
+
     if (conversationId) {
       await supabase.from("messages").insert({ conversation_id: conversationId, role: "user", content: input.userMessage });
+      messageCount += 1;
     }
   }
 
-  // ۲) تاریخچه
+  // ۲) محافظ تزریق پرامپت — قبل از صدازدن مدل (هم امن‌تر، هم ارزان‌تر)
+  if (settings.injection_guard_enabled && looksLikeInjection(input.userMessage)) {
+    if (supabase && conversationId) {
+      await supabase
+        .from("messages")
+        .insert({ conversation_id: conversationId, role: "assistant", content: INJECTION_REPLY });
+    }
+    console.warn("[chat] تلاش برای تزریق پرامپت:", maskPII(input.userMessage).slice(0, 200));
+    return { result: null, conversationId, sources: [], fallbackText: INJECTION_REPLY };
+  }
+
+  // ۳) تاریخچه
   let history: ChatMessage[] = [];
   if (supabase && conversationId) {
     const { data } = await supabase
@@ -79,22 +120,49 @@ async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
     history.push({ role: "user", content: input.userMessage });
   }
 
-  // ۳) بازیابی RAG
+  // ۴) بازیابی RAG
   const chunks = await retrieve(input.userMessage);
   const context = buildContext(chunks);
   const retrievedChunkIds = chunks.map((c) => c.id);
 
-  // ۴) system prompt + context
+  // ثبت شکاف دانش: سؤالی که منبع مرتبطی برایش پیدا نشد
+  const topScore = chunks.length ? Math.max(...chunks.map((c) => c.similarity)) : null;
+  if (supabase && (chunks.length === 0 || (topScore ?? 0) < WEAK_RETRIEVAL_SCORE)) {
+    await logKnowledgeGap(supabase, conversationId, channel, input.userMessage, topScore, settings);
+  }
+
+  // ۵) system prompt + context + سیاست‌ها
   const basePrompt = await getActivePrompt();
-  const system = context
-    ? `${basePrompt}\n\n# منابع بازیابی‌شده\nبرای پاسخ فقط از منابع زیر استفاده کن. اگر پاسخ در این منابع نبود، صادقانه بگو و کاربر را به ثبت درخواست مشاوره دعوت کن.\n\n${context}`
-    : `${basePrompt}\n\n(در پایگاه دانش منبع مرتبطی یافت نشد. اگر مطمئن نیستی، صادقانه بگو و کاربر را به «ثبت درخواست مشاوره» دعوت کن.)`;
+  const parts = [basePrompt];
 
-  // ۵) مدل + ابزار
+  if (settings.injection_guard_enabled) parts.push(INJECTION_GUARD_NOTE);
+
+  if (!isWithinOfficeHours(settings)) {
+    parts.push(
+      `# وضعیت زمانی\nالان خارج از ساعت کاری آرکان است. در اولین پاسخ این پیام را با لحن خودت منتقل کن: «${settings.offline_message}»`
+    );
+  }
+
+  if (settings.handoff_enabled) {
+    parts.push(
+      "# تحویل به انسان\nاگر کاربر صراحتاً خواست با یک انسان صحبت کند، شکایتی داشت، یا دو بار پشت‌سرهم نتوانستی پاسخ درستی بدهی، ابزار request_human را صدا بزن."
+    );
+  }
+
+  parts.push(
+    context
+      ? `# منابع بازیابی‌شده\nبرای پاسخ فقط از منابع زیر استفاده کن. اگر پاسخ در این منابع نبود، صادقانه بگو و کاربر را به ثبت درخواست مشاوره دعوت کن.\n\n${context}`
+      : "(در پایگاه دانش منبع مرتبطی یافت نشد. اگر مطمئن نیستی، صادقانه بگو و کاربر را به «ثبت درخواست مشاوره» دعوت کن.)"
+  );
+
+  const system = parts.join("\n\n");
+
+  // ۶) مدل + ابزار
   const modelCfg = await getModelConfig(channel);
-  const tools = buildTools(supabase, conversationId);
+  const tools = buildTools(supabase, conversationId, settings);
+  const countAfterTurn = messageCount + 1; // پیام کاربر + پاسخ دستیار
 
-  // ۶) تولید استریمی (با persist در onFinish)
+  // ۷) تولید استریمی (با persist در onFinish)
   const result = streamChat({
     model: modelCfg.active_model,
     system,
@@ -104,16 +172,20 @@ async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
     maxOutputTokens: modelCfg.max_tokens,
     tools,
     onFinish: async ({ text, usage, model }) => {
-      if (supabase && conversationId && text) {
-        await supabase.from("messages").insert({
-          conversation_id: conversationId,
-          role: "assistant",
-          content: text,
-          model_used: model,
-          tokens_in: usage?.inputTokens ?? null,
-          tokens_out: usage?.outputTokens ?? null,
-          retrieved_chunk_ids: retrievedChunkIds.length ? retrievedChunkIds : null,
-        });
+      if (!supabase || !conversationId || !text) return;
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        role: "assistant",
+        content: text,
+        model_used: model,
+        tokens_in: usage?.inputTokens ?? null,
+        tokens_out: usage?.outputTokens ?? null,
+        retrieved_chunk_ids: retrievedChunkIds.length ? retrievedChunkIds : null,
+      });
+
+      // خلاصه‌ی خودکار هر N پیام — برای پنل و CRM
+      if (settings.summary_enabled && shouldSummarize(countAfterTurn, settings.summary_every_n_messages)) {
+        await summarizeConversation(conversationId);
       }
     },
   });
@@ -130,7 +202,7 @@ async function prepareTurn(input: ChatTurnInput): Promise<PreparedTurn> {
 /** پاسخ استریمی (وب/ویجت). متادیتا در هدر x-arkan-meta (base64). */
 export async function handleChatTurn(input: ChatTurnInput): Promise<Response> {
   const p = await prepareTurn(input);
-  if (!p.result) return fallbackResponse(p.fallbackText ?? NOT_CONFIGURED);
+  if (!p.result) return fallbackResponse(p.fallbackText ?? NOT_CONFIGURED, p.conversationId);
   return p.result.toTextStreamResponse({
     headers: { "x-arkan-meta": toBase64({ conversationId: p.conversationId, sources: p.sources }) },
   });
@@ -146,9 +218,13 @@ export async function getReplyText(
   return { text: text || "—", conversationId: p.conversationId, sources: p.sources };
 }
 
-// ── ابزار ثبت لید ───────────────────────────────────────────────
-function buildTools(supabase: SupabaseClient<any, any, any> | null, conversationId: string | null): ToolSet {
-  return {
+// ── ابزارها ─────────────────────────────────────────────────────
+function buildTools(
+  supabase: SupabaseClient<any, any, any> | null,
+  conversationId: string | null,
+  settings: ChatSettings
+): ToolSet {
+  const tools: ToolSet = {
     capture_lead: tool({
       description:
         "ثبت «درخواست مشاوره» وقتی کاربر اطلاعات لازم را داده و آماده‌ی مشاوره است. فقط وقتی صدا بزن که حداقل نام، شماره تماس، نام کسب‌وکار، مرحله و چالش مشخص باشد.",
@@ -188,13 +264,81 @@ function buildTools(supabase: SupabaseClient<any, any, any> | null, conversation
       },
     }),
   };
+
+  // تحویل به انسان — گفتگو را در پنل با وضعیت «نیازمند انسان» علامت می‌زند.
+  if (settings.handoff_enabled) {
+    tools.request_human = tool({
+      description:
+        "ارجاع گفتگو به همکار انسانی آرکان. وقتی صدا بزن که کاربر صریحاً درخواست انسان کرد، شکایت یا نارضایتی داشت، یا سؤالش خارج از توان توست.",
+      inputSchema: z.object({
+        reason: z.string().describe("در یک جمله: چرا این گفتگو به انسان نیاز دارد"),
+        contact: z.string().optional().describe("شماره تماس یا ایمیلی که کاربر داده (اگر داده)"),
+      }),
+      execute: async ({ reason, contact }) => {
+        if (!supabase || !conversationId) {
+          return { ok: false, message: "ثبت ارجاع ممکن نشد؛ از کاربر بخواه فرم درخواست مشاوره را پر کند." };
+        }
+        const { error } = await supabase
+          .from("conversations")
+          .update({
+            status: "needs_human",
+            escalated_at: new Date().toISOString(),
+            escalation_reason: reason.slice(0, 500),
+            contact_hint: contact ? extractContactHint(contact) ?? contact.slice(0, 100) : null,
+          })
+          .eq("id", conversationId);
+        if (error) {
+          console.error("[request_human] خطا:", error.message);
+          return { ok: false, message: "ثبت ارجاع ممکن نشد." };
+        }
+        await summarizeConversation(conversationId);
+        return { ok: true, message: settings.handoff_message };
+      },
+    });
+  }
+
+  return tools;
 }
 
-function fallbackResponse(message: string): Response {
+// ── کمکی‌ها ─────────────────────────────────────────────────────
+async function logKnowledgeGap(
+  supabase: SupabaseClient<any, any, any>,
+  conversationId: string | null,
+  channel: string,
+  question: string,
+  topScore: number | null,
+  settings: ChatSettings
+): Promise<void> {
+  const text = settings.pii_masking_enabled ? maskPII(question) : question;
+  const { error } = await supabase.from("unanswered_questions").insert({
+    conversation_id: conversationId,
+    channel,
+    question: text.slice(0, 1000),
+    top_similarity: topScore,
+  });
+  // جدول ممکن است هنوز ساخته نشده باشد ⇒ گفتگو نباید بخوابد
+  if (error) console.error("[knowledge-gap]", error.message);
+}
+
+/** ثبت یک دور کامل (پیام کاربر + پاسخ آماده) وقتی مدل اصلاً صدا زده نمی‌شود. */
+async function persistCannedTurn(
+  supabase: SupabaseClient<any, any, any>,
+  conversationId: string | null,
+  userMessage: string,
+  reply: string
+): Promise<void> {
+  if (!conversationId) return;
+  await supabase.from("messages").insert([
+    { conversation_id: conversationId, role: "user", content: userMessage },
+    { conversation_id: conversationId, role: "assistant", content: reply },
+  ]);
+}
+
+function fallbackResponse(message: string, conversationId: string | null = null): Response {
   return new Response(message, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "x-arkan-meta": toBase64({ conversationId: null, sources: [] }),
+      "x-arkan-meta": toBase64({ conversationId, sources: [] }),
     },
   });
 }

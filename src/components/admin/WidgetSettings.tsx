@@ -14,6 +14,7 @@ export default function WidgetSettings({ config, siteUrl }: { config: WidgetConf
   const [position, setPosition] = useState(config.position);
   const [launcher, setLauncher] = useState(config.launcher_text);
   const [welcome, setWelcome] = useState(config.welcome_message);
+  const [suggested, setSuggested] = useState((config.suggested_questions ?? []).join("\n"));
   const [domains, setDomains] = useState((config.allowed_domains ?? []).join("\n"));
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -35,6 +36,11 @@ export default function WidgetSettings({ config, siteUrl }: { config: WidgetConf
         position,
         welcome_message: welcome,
         launcher_text: launcher,
+        suggested_questions: suggested
+          .split("\n")
+          .map((q) => q.trim())
+          .filter(Boolean)
+          .slice(0, 6),
         allowed_domains: allowed,
       });
       setMsg({ ok: res.ok, text: res.message ?? "" });
@@ -109,6 +115,19 @@ export default function WidgetSettings({ config, siteUrl }: { config: WidgetConf
           <div className="sm:col-span-2">
             <label className={labelCls}>پیام خوش‌آمد</label>
             <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} rows={3} className={`${inputCls} resize-y leading-7`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>سؤال‌های پیشنهادی (هر کدام در یک خط — حداکثر ۶ تا)</label>
+            <textarea
+              value={suggested}
+              onChange={(e) => setSuggested(e.target.value)}
+              rows={4}
+              className={`${inputCls} resize-y leading-7`}
+              placeholder="آرکان دقیقاً چه کمکی به کسب‌وکار من می‌کند؟"
+            />
+            <p className="mt-1.5 text-caption text-slate">
+              به‌صورت دکمه‌های آماده در ابتدای گفتگو (هم در ویجت و هم در صفحه‌ی چت) نشان داده می‌شوند. مهم‌ترین اهرم برای شروع‌شدن گفتگو؛ سؤال‌هایی بگذارید که به «درخواست مشاوره» ختم می‌شوند.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className={labelCls}>دامنه‌های مجاز (هر کدام در یک خط — خالی یعنی همه‌ی دامنه‌ها)</label>

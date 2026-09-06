@@ -1,5 +1,5 @@
 import "server-only";
-import { streamText, stepCountIs, type ToolSet } from "ai";
+import { generateText, streamText, stepCountIs, type ToolSet } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 /**
@@ -79,6 +79,25 @@ export function streamChat(opts: StreamChatOptions) {
       }
     },
   });
+}
+
+/** تولید متن یک‌باره (بدون استریم) — برای کارهای پس‌زمینه مثل خلاصه‌سازی. */
+export async function completeText(opts: {
+  model: string;
+  system: string;
+  prompt: string;
+  maxOutputTokens?: number;
+  temperature?: number;
+}): Promise<string> {
+  const openrouter = getOpenRouter();
+  const { text } = await generateText({
+    model: openrouter(opts.model),
+    system: opts.system,
+    prompt: opts.prompt,
+    temperature: opts.temperature ?? 0.3,
+    maxOutputTokens: opts.maxOutputTokens ?? 2000,
+  });
+  return text.trim();
 }
 
 export function isOpenRouterConfigured(): boolean {
