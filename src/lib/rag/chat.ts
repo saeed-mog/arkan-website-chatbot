@@ -147,7 +147,7 @@ export async function getReplyText(
 }
 
 // ── ابزار ثبت لید ───────────────────────────────────────────────
-function buildTools(supabase: SupabaseClient | null, conversationId: string | null): ToolSet {
+function buildTools(supabase: SupabaseClient<any, any, any> | null, conversationId: string | null): ToolSet {
   return {
     capture_lead: tool({
       description:

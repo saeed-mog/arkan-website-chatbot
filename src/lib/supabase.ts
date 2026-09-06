@@ -9,7 +9,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * اگر متغیرهای محیطی تنظیم نشده باشند، null برمی‌گرداند و سرور‌اکشن به فالبک
  * (لاگ سرور) سوییچ می‌کند تا توسعه قطع نشود.
  */
-export function getSupabaseAdmin(): SupabaseClient | null {
+export function getSupabaseAdmin(): SupabaseClient<any, any, any> | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -18,6 +18,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   }
 
   return createClient(url, serviceKey, {
+    db: { schema: "arkan" },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

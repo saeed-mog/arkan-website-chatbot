@@ -139,7 +139,7 @@ async function answerQuestion(chatId: number, question: string, from?: TelegramU
 }
 
 // ── نگاشت کاربر و گفتگو ──────────────────────────────────────────
-async function upsertUser(supabase: SupabaseClient, chatId: number, from?: TelegramUser) {
+async function upsertUser(supabase: SupabaseClient<any, any, any>, chatId: number, from?: TelegramUser) {
   const { data } = await supabase
     .from("unified_users")
     .select("id")
@@ -152,7 +152,7 @@ async function upsertUser(supabase: SupabaseClient, chatId: number, from?: Teleg
   }
 }
 
-async function getOrCreateConversation(supabase: SupabaseClient, chatId: number): Promise<string | null> {
+async function getOrCreateConversation(supabase: SupabaseClient<any, any, any>, chatId: number): Promise<string | null> {
   const { data: open } = await supabase
     .from("conversations")
     .select("id")
@@ -171,7 +171,7 @@ async function getOrCreateConversation(supabase: SupabaseClient, chatId: number)
   return created?.id ?? null;
 }
 
-async function resetConversation(supabase: SupabaseClient, chatId: number) {
+async function resetConversation(supabase: SupabaseClient<any, any, any>, chatId: number) {
   await supabase
     .from("conversations")
     .update({ status: "closed" })

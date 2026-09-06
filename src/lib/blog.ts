@@ -26,11 +26,12 @@ export type BlogPost = {
   createdAt: string;
 };
 
-function getBlogClient(): SupabaseClient | null {
+function getBlogClient(): SupabaseClient<any, any, any> | null {
   const url = process.env.BLOG_SUPABASE_URL;
   const key = process.env.BLOG_SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, {
+    db: { schema: "arkan" },
     auth: { persistSession: false, autoRefreshToken: false },
     // fetch را no-store می‌کنیم تا کش داده‌ی Next پست‌های جدید بلاگ را پنهان نکند.
     global: {
