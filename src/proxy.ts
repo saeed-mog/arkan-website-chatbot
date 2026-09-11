@@ -26,7 +26,7 @@ async function getAllowedDomains(): Promise<string[]> {
   }
 }
 
-export async function middleware(_req: NextRequest) {
+export async function proxy(_req: NextRequest) {
   const res = NextResponse.next();
   const domains = await getAllowedDomains();
   const ancestors = domains.length ? ["'self'", ...domains].join(" ") : "*";
