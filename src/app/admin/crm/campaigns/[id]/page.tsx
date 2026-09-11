@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic";
 // تولید ایمیل با AI و ارسال Resend از همین صفحه انجام می‌شود
 export const maxDuration = 60;
 
-export default async function CampaignDetailPage({ params }: { params: { id: string } }) {
-  const session = getSession();
+export default async function CampaignDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();

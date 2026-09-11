@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "سؤال‌های بی‌پاسخ", 
 export const dynamic = "force-dynamic";
 
 export default async function GapsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();

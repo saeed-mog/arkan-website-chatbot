@@ -29,8 +29,8 @@ const UNAUTHORIZED: ActionResult = { ok: false, error: "دسترسی غیرمج�
 const READ_ONLY: ActionResult = { ok: false, error: "نقش شما اجازه‌ی تغییر ندارد." };
 const NO_DB: ActionResult = { ok: false, error: "اتصال پایگاه داده برقرار نیست." };
 
-function guard(): { session: AdminSession } | { fail: ActionResult } {
-  const session = getSession();
+async function guard(): Promise<{ session: AdminSession } | { fail: ActionResult }> {
+  const session = await getSession();
   if (!session) return { fail: UNAUTHORIZED };
   if (!canWrite(session)) return { fail: READ_ONLY };
   return { session };
@@ -56,7 +56,7 @@ export async function convertLead(
   leadId: string,
   options: z.infer<typeof convertSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = convertSchema.safeParse(options);
   if (!parsed.success) return { ok: false, error: "ورودی نامعتبر است." };
@@ -167,7 +167,7 @@ function emptyToNull(value: string | undefined): string | null {
 export async function createContact(
   input: z.infer<typeof contactSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = contactSchema.safeParse(input);
   if (!parsed.success) {
@@ -200,7 +200,7 @@ export async function updateContact(
   id: string,
   input: z.infer<typeof contactSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = contactSchema.safeParse(input);
   if (!parsed.success) {
@@ -235,7 +235,7 @@ export async function updateContact(
 }
 
 export async function deleteContact(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -262,7 +262,7 @@ const companySchema = z.object({
 export async function createCompany(
   input: z.infer<typeof companySchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = companySchema.safeParse(input);
   if (!parsed.success) {
@@ -294,7 +294,7 @@ export async function updateCompany(
   id: string,
   input: z.infer<typeof companySchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = companySchema.safeParse(input);
   if (!parsed.success) {
@@ -323,7 +323,7 @@ export async function updateCompany(
 }
 
 export async function deleteCompany(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -346,7 +346,7 @@ const dealSchema = z.object({
 });
 
 export async function createDeal(input: z.infer<typeof dealSchema>): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = dealSchema.safeParse(input);
   if (!parsed.success) {
@@ -391,7 +391,7 @@ export async function updateDeal(
   id: string,
   input: z.infer<typeof dealUpdateSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = dealUpdateSchema.safeParse(input);
   if (!parsed.success) {
@@ -426,7 +426,7 @@ export async function moveDealStage(
   stageKey: string,
   lostReason?: string
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -477,7 +477,7 @@ export async function moveDealStage(
 }
 
 export async function deleteDeal(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -504,7 +504,7 @@ const activitySchema = z.object({
 export async function createActivity(
   input: z.infer<typeof activitySchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = activitySchema.safeParse(input);
   if (!parsed.success) {
@@ -546,7 +546,7 @@ export async function createActivity(
 }
 
 export async function completeActivity(id: string, done: boolean): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -564,7 +564,7 @@ export async function completeActivity(id: string, done: boolean): Promise<Actio
 }
 
 export async function deleteActivity(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -592,7 +592,7 @@ const contractSchema = z.object({
 export async function createContract(
   input: z.infer<typeof contractSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = contractSchema.safeParse(input);
   if (!parsed.success) {
@@ -675,7 +675,7 @@ export async function updateContract(
   id: string,
   input: z.infer<typeof contractUpdateSchema>
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const parsed = contractUpdateSchema.safeParse(input);
   if (!parsed.success) {
@@ -715,7 +715,7 @@ export async function updateContract(
 
 /** علامت‌گذاری به‌عنوان ارسال‌شده (بعد از کپی لینک برای کلاینت). */
 export async function markContractSent(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -734,7 +734,7 @@ export async function markContractSent(id: string): Promise<ActionResult> {
 }
 
 export async function cancelContract(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -753,7 +753,7 @@ export async function cancelContract(id: string): Promise<ActionResult> {
 }
 
 export async function deleteContract(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -768,7 +768,7 @@ export async function deleteContract(id: string): Promise<ActionResult> {
 
 /** بازنویسی متن قرارداد با AI بر اساس شناخت مشتری. */
 export async function draftContractAI(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -834,7 +834,7 @@ export async function createCampaign(
   segmentKey: string,
   goal: string
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   if (!name.trim()) return { ok: false, error: "نام کمپین را وارد کنید." };
   if (!SEGMENTS[segmentKey]) return { ok: false, error: "سگمنت نامعتبر است." };
@@ -880,7 +880,7 @@ export async function createCampaign(
 
 /** تولید متن AI برای یک ایمیل کمپین (تک‌به‌تک تا timeout نخوریم). */
 export async function generateCampaignEmailAI(emailId: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -917,7 +917,7 @@ export async function updateCampaignEmail(
   subject: string,
   body: string
 ): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   if (!subject.trim() || body.trim().length < 20) {
     return { ok: false, error: "موضوع و متن ایمیل را کامل کنید." };
@@ -936,7 +936,7 @@ export async function updateCampaignEmail(
 }
 
 export async function toggleCampaignEmailSkip(emailId: string, skip: boolean): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -953,7 +953,7 @@ export async function toggleCampaignEmailSkip(emailId: string, skip: boolean): P
 
 /** ارسال کمپین با Resend — فقط ایمیل‌های آماده (ready). */
 export async function sendCampaign(campaignId: string): Promise<ActionResult & { sent?: number; failed?: number }> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -1018,7 +1018,7 @@ export async function sendCampaign(campaignId: string): Promise<ActionResult & {
 }
 
 export async function deleteCampaign(id: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -1037,7 +1037,7 @@ export async function contractFollowupAI(
   contractId: string,
   shareUrl: string
 ): Promise<ActionResult & { text?: string }> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -1079,7 +1079,7 @@ export async function contractFollowupAI(
 export async function suggestContentAI(
   leadId: string
 ): Promise<ActionResult & { message?: string; url?: string; title?: string }> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
   const supabase = getSupabaseAdmin();
   if (!supabase) return NO_DB;
@@ -1128,7 +1128,7 @@ export async function suggestContentAI(
 // ── اکشن‌های AI ──────────────────────────────────────────────────
 
 export async function scoreLeadAI(leadId: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
 
   const result = await scoreLead(leadId);
@@ -1140,7 +1140,7 @@ export async function scoreLeadAI(leadId: string): Promise<ActionResult> {
 }
 
 export async function summarizeContactAI(contactId: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
 
   const result = await summarizeConversation(contactId);
@@ -1152,7 +1152,7 @@ export async function summarizeContactAI(contactId: string): Promise<ActionResul
 }
 
 export async function nextBestActionAI(dealId: string): Promise<ActionResult> {
-  const g = guard();
+  const g = await guard();
   if ("fail" in g) return g.fail;
 
   const result = await nextBestAction(dealId);

@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "مدل‌ها", robots: { index: fal
 export const dynamic = "force-dynamic";
 
 export default async function ModelsPage() {
-  if (!isAuthed()) redirect("/admin/login");
+  if (!await isAuthed()) redirect("/admin/login");
   const [models, embedding] = await Promise.all([getAllModelConfigs(), getEmbeddingConfig()]);
   return (
     <AdminShell active="models">

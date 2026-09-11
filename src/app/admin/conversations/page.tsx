@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "گفتگوها", robots: { index: fa
 export const dynamic = "force-dynamic";
 
 export default async function ConversationsPage() {
-  if (!isAuthed()) redirect("/admin/login");
+  if (!await isAuthed()) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();
   let conversations: ConvRow[] = [];

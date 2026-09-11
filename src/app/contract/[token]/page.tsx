@@ -21,7 +21,8 @@ function faDate(iso: string | null, withTime = false): string {
   }).format(new Date(iso));
 }
 
-export default async function PublicContractPage({ params }: { params: { token: string } }) {
+export default async function PublicContractPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const contract = await getContractByToken(params.token);
   if (!contract) notFound();
 

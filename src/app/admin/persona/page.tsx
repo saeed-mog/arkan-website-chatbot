@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "پرسونا", robots: { index: fals
 export const dynamic = "force-dynamic";
 
 export default async function PersonaPage() {
-  if (!isAuthed()) redirect("/admin/login");
+  if (!await isAuthed()) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();
   let versions: PromptVersion[] = [];

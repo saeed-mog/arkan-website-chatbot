@@ -7,8 +7,8 @@ import CrmAssistant from "@/components/admin/crm/CrmAssistant";
 export const metadata: Metadata = { title: "دستیار CRM", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-export default function CrmAssistantPage() {
-  const session = getSession();
+export default async function CrmAssistantPage() {
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   return (

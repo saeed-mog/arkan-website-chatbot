@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "کاربران", robots: { index: fa
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
   if (!hasRole(session, "admin")) redirect("/admin");
 

@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 // اکشن «بازنویسی با AI» از همین صفحه صدا زده می‌شود؛ reasoning مدل زمان می‌برد.
 export const maxDuration = 60;
 
-export default async function ContractEditPage({ params }: { params: { id: string } }) {
-  const session = getSession();
+export default async function ContractEditPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const { data: contract, error } = await getContract(params.id);
@@ -28,7 +29,7 @@ export default async function ContractEditPage({ params }: { params: { id: strin
   if (!contract) notFound();
 
   // ساخت لینک عمومی از هاست جاری (روی هر دامنه‌ای — preview یا production — درست است)
-  const h = headers();
+  const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const shareUrl = `${proto}://${host}/contract/${contract.share_token}`;

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   let data = null;

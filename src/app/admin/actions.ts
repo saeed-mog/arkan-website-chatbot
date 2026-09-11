@@ -78,7 +78,7 @@ export async function login(
     if (password !== expected) {
       return { error: "رمز عبور نادرست است." };
     }
-    cookies().set(
+    (await cookies()).set(
       ADMIN_COOKIE,
       createSessionToken({ id: "legacy", email: "legacy-admin", role: "owner" }),
       COOKIE_OPTIONS
@@ -109,7 +109,7 @@ export async function login(
     return { error: "ایمیل یا رمز عبور نادرست است." };
   }
 
-  cookies().set(ADMIN_COOKIE, createSessionToken(data), COOKIE_OPTIONS);
+  (await cookies()).set(ADMIN_COOKIE, createSessionToken(data), COOKIE_OPTIONS);
   await supabase
     .from("admin_users")
     .update({ last_login_at: new Date().toISOString() })
@@ -156,7 +156,7 @@ export async function createFirstOwner(
 
   if (error || !data) return { error: error?.message ?? "ساخت کاربر ناموفق بود." };
 
-  cookies().set(ADMIN_COOKIE, createSessionToken(data), COOKIE_OPTIONS);
+  (await cookies()).set(ADMIN_COOKIE, createSessionToken(data), COOKIE_OPTIONS);
   await logAudit({ uid: data.id, email: data.email, role: data.role, exp: 0 }, "create_first_owner");
 
   redirect("/admin");
@@ -164,7 +164,7 @@ export async function createFirstOwner(
 
 /** خروج مدیر. */
 export async function logout(): Promise<void> {
-  cookies().delete(ADMIN_COOKIE);
+  (await cookies()).delete(ADMIN_COOKIE);
   redirect("/admin/login");
 }
 
@@ -173,7 +173,7 @@ export async function updateLeadStatus(
   id: string,
   status: LeadStatus
 ): Promise<{ ok: boolean; error?: string }> {
-  const session = getSession();
+  const session = await getSession();
   if (!session) return { ok: false, error: "دسترسی غیرمجاز." };
   if (!canWrite(session)) return { ok: false, error: "نقش شما اجازه‌ی تغییر ندارد." };
   if (!LEAD_STATUSES.includes(status)) {
@@ -205,7 +205,7 @@ export async function createAdminUser(
   password: string,
   role: Role
 ): Promise<ActionResult> {
-  const session = getSession();
+  const session = await getSession();
   if (!hasRole(session, "admin")) return { ok: false, error: "دسترسی غیرمجاز." };
   if (!ROLES.includes(role)) return { ok: false, error: "نقش نامعتبر است." };
   if ((role === "admin" || role === "owner") && !hasRole(session, "owner")) {
@@ -233,7 +233,7 @@ export async function createAdminUser(
 
 /** تغییر نقش کاربر (فقط owner). */
 export async function updateUserRole(id: string, role: Role): Promise<ActionResult> {
-  const session = getSession();
+  const session = await getSession();
   if (!hasRole(session, "owner")) return { ok: false, error: "فقط مالک می‌تواند نقش تغییر دهد." };
   if (!ROLES.includes(role)) return { ok: false, error: "نقش نامعتبر است." };
   if (session!.uid === id) return { ok: false, error: "نمی‌توانید نقش خودتان را تغییر دهید." };
@@ -251,7 +251,7 @@ export async function updateUserRole(id: string, role: Role): Promise<ActionResu
 
 /** فعال/غیرفعال‌کردن کاربر (فقط admin به بالا؛ غیرفعال‌کردن admin/owner فقط توسط owner). */
 export async function toggleUserActive(id: string, isActive: boolean): Promise<ActionResult> {
-  const session = getSession();
+  const session = await getSession();
   if (!hasRole(session, "admin")) return { ok: false, error: "دسترسی غیرمجاز." };
   if (session!.uid === id) return { ok: false, error: "نمی‌توانید حساب خودتان را غیرفعال کنید." };
 
@@ -282,7 +282,7 @@ export async function toggleUserActive(id: string, isActive: boolean): Promise<A
 
 /** تنظیم رمز جدید برای کاربر (فقط owner). */
 export async function resetUserPassword(id: string, password: string): Promise<ActionResult> {
-  const session = getSession();
+  const session = await getSession();
   if (!hasRole(session, "owner")) return { ok: false, error: "فقط مالک می‌تواند رمز بازنشانی کند." };
   if (password.length < 8) return { ok: false, error: "رمز عبور باید حداقل ۸ کاراکتر باشد." };
 

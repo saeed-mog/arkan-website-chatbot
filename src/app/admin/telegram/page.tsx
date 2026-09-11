@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "تلگرام", robots: { index: fals
 export const dynamic = "force-dynamic";
 
 export default async function TelegramPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
   const supabase = getSupabaseAdmin();
   let userCount = 0;

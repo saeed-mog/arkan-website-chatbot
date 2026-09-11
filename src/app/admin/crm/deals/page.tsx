@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function DealsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();

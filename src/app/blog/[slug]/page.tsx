@@ -10,9 +10,10 @@ import { toFa } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { slug: string } };
+type Props = { params: Promise<{ slug: string }> };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) return { title: "مقاله پیدا نشد" };
 
@@ -38,7 +39,8 @@ function faDate(iso: string): string {
   });
 }
 
-export default async function BlogPostPage({ params }: Props) {
+export default async function BlogPostPage(props: Props) {
+  const params = await props.params;
   const post = await getPublishedPostBySlug(params.slug);
   if (!post) notFound();
 

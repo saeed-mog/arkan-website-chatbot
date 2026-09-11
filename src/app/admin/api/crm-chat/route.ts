@@ -157,7 +157,7 @@ function buildTools(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) 
 }
 
 export async function POST(req: NextRequest) {
-  if (!getSession()) {
+  if (!await getSession()) {
     return NextResponse.json({ error: "دسترسی غیرمجاز." }, { status: 401 });
   }
   if (!isOpenRouterConfigured()) {

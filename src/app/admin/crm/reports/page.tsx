@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "گزارش‌های CRM", robots: { 
 export const dynamic = "force-dynamic";
 
 export default async function CrmReportsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const { data, error } = await getCrmReport();

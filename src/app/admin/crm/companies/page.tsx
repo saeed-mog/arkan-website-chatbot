@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "شرکت‌ها", robots: { index: f
 export const dynamic = "force-dynamic";
 
 export default async function CompaniesPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const { data: companies, error } = await getCompanies();

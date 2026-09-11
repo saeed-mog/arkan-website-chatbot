@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const SITE_URL = "https://arkan-website-chatbot.vercel.app";
 
 export default async function WidgetAdminPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
   const cfg = await getWidgetConfig();
   return (

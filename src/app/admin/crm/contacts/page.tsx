@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "مخاطبان", robots: { index: fa
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();

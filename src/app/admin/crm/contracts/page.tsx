@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "قراردادها", robots: { index
 export const dynamic = "force-dynamic";
 
 export default async function ContractsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();

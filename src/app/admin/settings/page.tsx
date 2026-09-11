@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "تنظیمات چت‌بات", robot
 export const dynamic = "force-dynamic";
 
 export default async function ChatSettingsPage() {
-  const session = getSession();
+  const session = await getSession();
   if (!session) redirect("/admin/login");
   const settings = await getChatSettings();
   return (

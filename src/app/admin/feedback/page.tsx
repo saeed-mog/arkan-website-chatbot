@@ -17,7 +17,7 @@ function fmt(iso: string) {
 }
 
 export default async function FeedbackPage() {
-  if (!isAuthed()) redirect("/admin/login");
+  if (!await isAuthed()) redirect("/admin/login");
   const data = await getReviewData();
 
   return (

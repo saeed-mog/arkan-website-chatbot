@@ -23,13 +23,13 @@ import { streamChat } from "@/lib/rag/generate";
 type ActionResult = { ok: boolean; message?: string };
 
 // خواندنی: فقط نشست معتبر لازم است
-function guard(): boolean {
-  return isAuthed();
+async function guard(): Promise<boolean> {
+  return await isAuthed();
 }
 
 // تغییردهنده: نقش viewer (فقط‌خواندنی) مجاز نیست
-function guardWrite(): boolean {
-  return canWrite(getSession());
+async function guardWrite(): Promise<boolean> {
+  return canWrite(await getSession());
 }
 
 // ── پایگاه دانش ─────────────────────────────────────────────────
@@ -38,7 +38,7 @@ export async function ingestTextAction(
   text: string,
   tagsRaw?: string
 ): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (!title.trim() || text.trim().length < 20) {
     return { ok: false, message: "عنوان و متن (حداقل ۲۰ نویسه) لازم است." };
   }
@@ -59,7 +59,7 @@ export async function ingestUrlAction(
   title?: string,
   tagsRaw?: string
 ): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (!/^https?:\/\//i.test(url.trim())) {
     return { ok: false, message: "آدرس URL معتبر نیست." };
   }
@@ -77,7 +77,7 @@ export async function ingestUrlAction(
 
 /** آپلود چند فایل با فرمت‌های گوناگون (md/txt/csv/json/yaml/html/pdf) + تگ مشترک. */
 export async function ingestFilesAction(formData: FormData): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const tags = parseTags(formData.get("tags") as string | null);
   if (files.length === 0) return { ok: false, message: "فایلی انتخاب نشده." };
@@ -104,14 +104,14 @@ export async function ingestFilesAction(formData: FormData): Promise<ActionResul
 }
 
 export async function deleteDocAction(id: string): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const res = await deleteDocument(id);
   revalidatePath("/admin/knowledge");
   return res;
 }
 
 export async function reindexDocAction(id: string): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const res = await reindexDocument(id);
   revalidatePath("/admin/knowledge");
   return res.ok
@@ -122,7 +122,7 @@ export async function reindexDocAction(id: string): Promise<ActionResult> {
 export async function testSearchAction(
   query: string
 ): Promise<{ ok: boolean; chunks?: RetrievedChunk[]; message?: string }> {
-  if (!guard()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guard())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (!query.trim()) return { ok: false, message: "پرسش خالی است." };
   try {
     const chunks = await retrieve(query.trim());
@@ -143,7 +143,7 @@ export async function saveModelConfigAction(values: {
   top_p: number;
   fallback_model: string | null;
 }): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -161,7 +161,7 @@ export async function saveModelConfigAction(values: {
     : await supabase.from("model_config").insert(payload);
 
   if (error) return { ok: false, message: error.message };
-  await logAudit(getSession(), "chatbot_model_config_update", channel, {
+  await logAudit(await getSession(), "chatbot_model_config_update", channel, {
     model: values.active_model,
     max_tokens: values.max_tokens,
   });
@@ -177,7 +177,7 @@ export async function saveEmbeddingConfigAction(values: {
   reranker_enabled: boolean;
   reranker_model: string | null;
 }): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -202,7 +202,7 @@ export async function savePromptAction(
   content: string,
   persona: string
 ): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (content.trim().length < 20) return { ok: false, message: "متن پرامپت خیلی کوتاه است." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
@@ -220,7 +220,7 @@ export async function savePromptAction(
 }
 
 export async function activatePromptAction(id: string): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
   await supabase.from("prompt_versions").update({ is_active: false }).eq("is_active", true);
@@ -239,7 +239,7 @@ export async function playgroundAction(
   model?: string;
   message?: string;
 }> {
-  if (!guard()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guard())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (query.trim().length < 2) return { ok: false, message: "پرسش خالی است." };
   try {
     const chunks = await retrieve(query.trim());
@@ -285,7 +285,7 @@ export async function getTelegramStatusAction(): Promise<{
   pending?: number;
   message?: string;
 }> {
-  if (!guard()) return { ok: false, configured: false, message: "دسترسی غیرمجاز." };
+  if (!(await guard())) return { ok: false, configured: false, message: "دسترسی غیرمجاز." };
   const { isTelegramConfigured, getMe, getWebhookInfo } = await import("@/lib/telegram");
   if (!isTelegramConfigured()) return { ok: true, configured: false };
   try {
@@ -304,7 +304,7 @@ export async function getTelegramStatusAction(): Promise<{
 }
 
 export async function setTelegramWebhookAction(): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (!secret) return { ok: false, message: "TELEGRAM_WEBHOOK_SECRET تنظیم نشده است." };
   const { setWebhook } = await import("@/lib/telegram");
@@ -319,7 +319,7 @@ export async function setTelegramWebhookAction(): Promise<ActionResult> {
 }
 
 export async function deleteTelegramWebhookAction(): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const { deleteWebhook } = await import("@/lib/telegram");
   try {
     await deleteWebhook();
@@ -330,7 +330,7 @@ export async function deleteTelegramWebhookAction(): Promise<ActionResult> {
 }
 
 export async function broadcastTelegramAction(text: string): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   if (text.trim().length < 2) return { ok: false, message: "متن پیام خالی است." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
@@ -364,7 +364,7 @@ export async function saveWidgetConfigAction(values: {
   suggested_questions: string[];
   allowed_domains: string[];
 }): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -399,7 +399,7 @@ export type ConvMessage = {
 export async function getConversationDetailAction(
   conversationId: string
 ): Promise<{ ok: boolean; messages?: ConvMessage[]; message?: string }> {
-  if (!guard()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guard())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -449,7 +449,7 @@ export async function getConversationDetailAction(
 
 // ── تنظیمات رفتاری چت‌بات ───────────────────────────────────────
 export async function saveChatSettingsAction(values: ChatSettings): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -477,7 +477,7 @@ export async function saveChatSettingsAction(values: ChatSettings): Promise<Acti
     : await supabase.from("chat_settings").insert(payload);
 
   if (error) return { ok: false, message: error.message };
-  await logAudit(getSession(), "chatbot_settings_update");
+  await logAudit(await getSession(), "chatbot_settings_update");
   revalidatePath("/admin/settings");
   return { ok: true, message: "تنظیمات چت‌بات ذخیره شد." };
 }
@@ -487,7 +487,7 @@ export async function setConversationStatusAction(
   conversationId: string,
   status: "open" | "needs_human" | "closed"
 ): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
@@ -497,7 +497,7 @@ export async function setConversationStatusAction(
   const { error } = await supabase.from("conversations").update(patch).eq("id", conversationId);
   if (error) return { ok: false, message: error.message };
 
-  await logAudit(getSession(), "conversation_status_change", conversationId, { status });
+  await logAudit(await getSession(), "conversation_status_change", conversationId, { status });
   revalidatePath("/admin/conversations");
   return { ok: true, message: "وضعیت گفتگو به‌روز شد." };
 }
@@ -506,30 +506,30 @@ export async function setConversationStatusAction(
 export async function summarizeConversationAction(
   conversationId: string
 ): Promise<{ ok: boolean; summary?: string; message?: string }> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const summary = await summarizeConversation(conversationId);
   if (!summary) return { ok: false, message: "تولید خلاصه ممکن نشد." };
-  await logAudit(getSession(), "ai_summarize_conversation", conversationId);
+  await logAudit(await getSession(), "ai_summarize_conversation", conversationId);
   revalidatePath("/admin/conversations");
   return { ok: true, summary };
 }
 
 // ── شکاف‌های پایگاه دانش (سؤالات بی‌پاسخ) ────────────────────────
 export async function resolveGapAction(id: string, resolved: boolean): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 
   const { error } = await supabase.from("unanswered_questions").update({ resolved }).eq("id", id);
   if (error) return { ok: false, message: error.message };
 
-  await logAudit(getSession(), "knowledge_gap_resolve", id, { resolved });
+  await logAudit(await getSession(), "knowledge_gap_resolve", id, { resolved });
   revalidatePath("/admin/gaps");
   return { ok: true, message: resolved ? "به‌عنوان رفع‌شده علامت خورد." : "دوباره باز شد." };
 }
 
 export async function deleteGapAction(id: string): Promise<ActionResult> {
-  if (!guardWrite()) return { ok: false, message: "دسترسی غیرمجاز." };
+  if (!(await guardWrite())) return { ok: false, message: "دسترسی غیرمجاز." };
   const supabase = getSupabaseAdmin();
   if (!supabase) return { ok: false, message: "اتصال Supabase برقرار نیست." };
 

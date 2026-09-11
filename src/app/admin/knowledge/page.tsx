@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export default async function KnowledgePage() {
-  if (!isAuthed()) redirect("/admin/login");
+  if (!await isAuthed()) redirect("/admin/login");
 
   const supabase = getSupabaseAdmin();
   let docs: DocRow[] = [];

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLoginPage() {
   // اگر از قبل واردشده، مستقیم به پنل
-  if (isAuthed()) redirect("/admin");
+  if (await isAuthed()) redirect("/admin");
 
   const bootstrap = await isBootstrapMode();
 

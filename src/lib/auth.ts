@@ -94,14 +94,14 @@ function parseSessionToken(value?: string): AdminSession | null {
 }
 
 /** نشست معتبر درخواست فعلی (سمت سرور) یا null. */
-export function getSession(): AdminSession | null {
-  const value = cookies().get(ADMIN_COOKIE)?.value;
+export async function getSession(): Promise<AdminSession | null> {
+  const value = (await cookies()).get(ADMIN_COOKIE)?.value;
   return parseSessionToken(value);
 }
 
 /** آیا درخواست فعلی نشست معتبر مدیر دارد؟ (سمت سرور) */
-export function isAuthed(): boolean {
-  return getSession() !== null;
+export async function isAuthed(): Promise<boolean> {
+  return (await getSession()) !== null;
 }
 
 /** آیا نقش نشست حداقل به اندازه‌ی نقش خواسته‌شده قدرت دارد؟ */

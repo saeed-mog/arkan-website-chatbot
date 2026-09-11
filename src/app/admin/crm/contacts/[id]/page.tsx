@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic";
 // اکشن «تولید خلاصه‌ی AI» از همین صفحه صدا زده می‌شود؛ reasoning مدل زمان می‌برد.
 export const maxDuration = 60;
 
-export default async function ContactDetailPage({ params }: { params: { id: string } }) {
-  const session = getSession();
+export default async function ContactDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const session = await getSession();
   if (!session) redirect("/admin/login");
 
   const [{ data, error }, { data: stages }] = await Promise.all([
