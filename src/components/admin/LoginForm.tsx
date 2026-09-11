@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { login, createFirstOwner } from "@/app/admin/actions";
 import Logo from "@/components/ui/Logo";
 
@@ -70,8 +70,8 @@ function Field({
  */
 export default function LoginForm({ bootstrap }: { bootstrap: boolean }) {
   const [mode, setMode] = useState<"login" | "setup">("login");
-  const [loginState, loginAction] = useFormState(login, {});
-  const [setupState, setupAction] = useFormState(createFirstOwner, {});
+  const [loginState, loginAction] = useActionState(login, {});
+  const [setupState, setupAction] = useActionState(createFirstOwner, {});
 
   const showSetup = bootstrap && mode === "setup";
 

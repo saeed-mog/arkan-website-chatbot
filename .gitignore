@@ -31,3 +31,6 @@ next-env.d.ts
 # vercel
 .vercel
 supabase/.temp
+
+# Claude Code local config
+.claude/
